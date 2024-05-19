@@ -117,7 +117,7 @@ static class Settings
 
 partial class Version
 {
-    public const string versionString = "0.0.1";
+    public const string versionString = "0.0.2";
     public static readonly System.Version version = new(versionString);
     public const string versionUrl = "https://site-mm.rf.gd/v2/";
 }
