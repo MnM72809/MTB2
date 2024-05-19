@@ -75,6 +75,13 @@ internal class Arguments
                 Process currentProcess = Process.GetCurrentProcess();
                 currentProcess.PriorityClass = ProcessPriorityClass.Normal;
                 break;
+            case "--loglinenumbers":
+            case "--linenumbers":
+            case "--lognumbers":
+            case "-ln":
+                logLineNumbers = true;
+                Log("Log line numbers enabled", LogLevel.Debug);
+                break;
             default:
                 Log($"Unknown argument provided: {arg}", LogLevel.Warning);
                 break;
