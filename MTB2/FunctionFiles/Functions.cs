@@ -1,14 +1,17 @@
-﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
-using OpenQA.Selenium.Edge;
+﻿using Microsoft.Win32;
+using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium.Edge;
+using OpenQA.Selenium.Support.UI;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using static MTB2.Debugger;
 
 namespace MTB2;
 
 internal class Functions
 {
-    public static string[] uiArgs = new string[] { "--enableui", "--enableconsoleui", "--enableUI", "--ui", "--UI" };
+    public static string[] uiArgs = ["--enableui", "--enableconsoleui", "--enableUI", "--ui", "--UI"];
     public static void HandleUI(string[] args)
     {
 
@@ -50,7 +53,7 @@ internal class Functions
 
     private static string[] AddEnableUIArgument(string[] args)
     {
-        return args.Concat(args.Contains("--enableui", StringComparer.OrdinalIgnoreCase) ? Array.Empty<string>() : new[] { "--enableui" }).ToArray();
+        return [.. args, .. args.Contains("--enableui", StringComparer.OrdinalIgnoreCase) ? Array.Empty<string>() : ["--enableui"]];
     }
 
     private static ProcessStartInfo CreateProcessStartInfo(string fileName, string argsString)
@@ -73,9 +76,9 @@ internal class Functions
 
     private static void HandleProcessStartError(Exception ex)
     {
-        Log($"An error occurred: {ex.Message}", LogLevel.Critical);
-        Log($"Stack trace: {ex.StackTrace}", LogLevel.Critical);
-        Log("Failed to start new process. Press any key to exit, or press \"c\" to continue with console enabled.", LogLevel.Critical);
+        Log($"An error occurred: {ex.Message}", Debugger.LogLevel.Critical);
+        Log($"Stack trace: {ex.StackTrace}", Debugger.LogLevel.Critical);
+        Log("Failed to start new process. Press any key to exit, or press \"c\" to continue with console enabled.", Debugger.LogLevel.Critical);
         if (Console.ReadKey().Key != ConsoleKey.C)
         {
             Environment.Exit(1);
@@ -102,13 +105,156 @@ internal class Functions
             }
             catch (Exception ex)
             {
-                Log($"An error occurred: {ex.Message}", LogLevel.Critical);
-                Log($"Stack trace: {ex.StackTrace}", LogLevel.Critical);
+                Log($"An error occurred: {ex.Message}", Debugger.LogLevel.Critical);
+                Log($"Stack trace: {ex.StackTrace}", Debugger.LogLevel.Critical);
                 throw;
                 //return false;
             }
         }
         return false;
+    }
+
+
+
+
+
+
+    public static string GetComputerIdInitials(string computerId)
+    {
+        // Add the first 3 characters of the computer ID
+        string newId = computerId[..Math.Min(3, computerId.Length)];
+
+        // Get the uppercase characters from the computer ID
+        string initials = new(computerId.Where(char.IsUpper).ToArray());
+
+        // Remove the first character from the initials and add it to the new ID
+        if (initials.Length >= 2)
+        {
+            newId += initials[1..];
+        }
+        else
+        {
+            newId += initials;
+        }
+
+        return newId;
+    }
+}
+
+
+class StartOnBootClass
+{
+    // Start process when the computer boots
+    public static void StartOnBoot()
+    {
+        // Check if windows
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            Log("Can't add program to registry if not Windows.", Debugger.LogLevel.Warning);
+            Log("Using another method");
+            StartOnBootNoWindows();
+            return;
+        }
+
+        // Get the path of the current executable
+        string? exePath = Environment.ProcessPath;
+
+        // Null check
+        if (exePath == null)
+        {
+            Log("Unexpected error: The path of the current executable is null.", Debugger.LogLevel.Critical);
+            return;
+        }
+
+        // Open the registry key
+        using RegistryKey? key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+        if (key == null)
+        {
+            Log("Unexpected error: Failed to open the registry key.", Debugger.LogLevel.Critical);
+            return;
+        }
+
+        // Add the executable to the registry key
+        key.SetValue("MTB2", exePath);
+    }
+    private static void StartOnBootNoWindows()
+    {
+        // Add program to startup folder
+        string? startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+        if (string.IsNullOrWhiteSpace(startupFolder))
+        {
+            Log("Unexpected error: The path of the startup folder is null or empty.", Debugger.LogLevel.Critical);
+            return;
+        }
+
+        // Get the path of the current executable
+        string? exePath = Environment.ProcessPath;
+
+        // Null or empty check
+        if (string.IsNullOrWhiteSpace(exePath))
+        {
+            Log("Unexpected error: The path of the current executable is null or empty.", Debugger.LogLevel.Critical);
+            return;
+        }
+
+        // Check if the executable file exists
+        if (!File.Exists(exePath))
+        {
+            Log($"Unexpected error: The executable file does not exist at path: {exePath}", Debugger.LogLevel.Critical);
+            return;
+        }
+
+        // Create a shortcut in the startup folder
+        string shortcutPath = Path.Combine(startupFolder, "MTB2.lnk");
+        CreateShortcut(shortcutPath, exePath);
+    }
+    private static void CreateShortcut(string shortcutPath, string targetPath)
+    {
+        // Create batch file to create shortcut
+        string batchPath = Path.Combine(Path.GetTempPath(), "createShortcut.bat");
+        string vbsPath = Path.Combine(Path.GetTempPath(), "CreateShortcut.vbs");
+
+        try
+        {
+            File.WriteAllText(batchPath, $"echo Set objShell = CreateObject(\"WScript.Shell\") > \"{vbsPath}\"\n" +
+                $"echo Set objShortcut = objShell.CreateShortcut(\"{shortcutPath}\") >> \"{vbsPath}\"\n" +
+                $"echo objShortcut.TargetPath = \"{targetPath}\" >> \"{vbsPath}\"\n" +
+                $"echo objShortcut.Save >> \"{vbsPath}\"\n" +
+                $"cscript \"{vbsPath}\"\n" +
+                // Add timeout to wait for the shortcut to be created
+                $"timeout /t 1\n" +
+                $"del \"{vbsPath}\"");
+
+            // Execute the batch file
+            ProcessStartInfo startInfo = new()
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/C \"{batchPath}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using Process? process = Process.Start(startInfo);
+            process?.WaitForExit();
+
+            // Check if the shortcut was created
+            if (!File.Exists(shortcutPath))
+            {
+                Log("Failed to create shortcut in startup folder.", Debugger.LogLevel.Critical);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to create shortcut. Error: {ex.Message}", Debugger.LogLevel.Critical);
+        }
+        finally
+        {
+            // Delete the batch file
+            if (File.Exists(batchPath))
+            {
+                File.Delete(batchPath);
+            }
+        }
     }
 }
 
@@ -151,10 +297,10 @@ internal class Functions
 
 
 
-public class Msb
+public partial class Msb
 {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern int MessageBox(int hWnd, string text, string caption, uint type);
+    internal static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
 
 
 
@@ -198,6 +344,11 @@ public class Msb
 
 class WebRequest
 {
+    /// <summary>
+    /// Retrieves the content of a web page specified by the given URL.
+    /// </summary>
+    /// <param name="url">The URL of the web page to retrieve the content from.</param>
+    /// <returns>The content of the web page as a string.</returns>
     public static string GetPageContent(string url)
     {
         OpenQA.Selenium.IWebDriver? driver = null;
@@ -206,11 +357,11 @@ class WebRequest
         {
             try
             {
-                driver = CreateChromeDriver();
+                driver = CreateChromeDriver;
             }
             catch (OpenQA.Selenium.WebDriverException)
             {
-                driver = CreateEdgeDriver();
+                driver = CreateEdgeDriver;
             }
 
             driver.Navigate().GoToUrl(url);
@@ -224,8 +375,8 @@ class WebRequest
         }
         catch (Exception ex)
         {
-            Log($"An error occurred: {ex.Message}", LogLevel.Critical);
-            Log($"Stack trace: {ex.StackTrace}", LogLevel.Critical);
+            Log($"An error occurred: {ex.Message}", Debugger.LogLevel.Critical);
+            Log($"Stack trace: {ex.StackTrace}", Debugger.LogLevel.Critical);
             throw;
             //return string.Empty;
         }
@@ -235,28 +386,77 @@ class WebRequest
         }
     }
 
-    private static OpenQA.Selenium.IWebDriver CreateChromeDriver()
+    private static OpenQA.Selenium.IWebDriver CreateChromeDriver
     {
-        var chromeOptions = new ChromeOptions();
-        chromeOptions.AddArgument("headless");
+        get
+        {
+            var chromeOptions = new ChromeOptions();
+            chromeOptions.AddArgument("headless");
 
-        var chromeService = ChromeDriverService.CreateDefaultService();
-        chromeService.HideCommandPromptWindow = true;
-        chromeService.SuppressInitialDiagnosticInformation = true;
+            var chromeService = ChromeDriverService.CreateDefaultService();
+            chromeService.HideCommandPromptWindow = true;
+            chromeService.SuppressInitialDiagnosticInformation = true;
 
-        return new ChromeDriver(chromeService, chromeOptions);
+            return new ChromeDriver(chromeService, chromeOptions);
+        }
     }
 
-    private static OpenQA.Selenium.IWebDriver CreateEdgeDriver()
+    private static OpenQA.Selenium.IWebDriver CreateEdgeDriver
     {
-        var edgeOptions = new EdgeOptions();
-        edgeOptions.AddArgument("headless");
+        get
+        {
+            var edgeOptions = new EdgeOptions();
+            edgeOptions.AddArgument("headless");
 
-        var edgeService = EdgeDriverService.CreateDefaultService();
-        edgeService.HideCommandPromptWindow = true;
-        edgeService.SuppressInitialDiagnosticInformation = true;
+            var edgeService = EdgeDriverService.CreateDefaultService();
+            edgeService.HideCommandPromptWindow = true;
+            edgeService.SuppressInitialDiagnosticInformation = true;
 
-        return new EdgeDriver(edgeService, edgeOptions);
+            return new EdgeDriver(edgeService, edgeOptions);
+        }
+    }
+
+
+
+
+
+
+    public static bool UploadFile(string path)
+    {
+        IWebDriver driver;
+        try
+        {
+            driver = CreateChromeDriver;
+        }
+        catch (OpenQA.Selenium.WebDriverException)
+        {
+            driver = CreateEdgeDriver;
+        }
+
+        driver.Navigate().GoToUrl(Version.versionUrl + "commands/uploadFile.php");
+
+        // Assuming the file input element has an id of 'file-upload'
+        IWebElement fileInput = driver.FindElement(By.Id("file-upload"));
+
+        // Use SendKeys to enter the file path into the file upload input
+        fileInput.SendKeys(path);
+
+        // Submit the form or click the upload button
+        // Assuming the upload button has an id of 'upload-button'
+        IWebElement uploadButton = driver.FindElement(By.Id("upload-button"));
+        uploadButton.Click();
+
+        // Wait for the upload to complete
+        WebDriverWait wait = new(driver, TimeSpan.FromSeconds(10));
+        wait.Until(drv => drv.FindElement(By.Id("upload-success")));
+
+        // return success or failure
+        bool success = driver.FindElement(By.Id("upload-success")).Displayed;
+
+        // Remember to quit the driver
+        driver.Quit();
+
+        return success;
     }
 }
 
@@ -314,9 +514,9 @@ class Debugger
     public static void Log(string message, LogLevel level = LogLevel.Info, bool force = false)
     {
         // Check for "\n" in the beginning of the message
-        if (message.StartsWith("\n"))
+        if (message.StartsWith('\n'))
         {
-            while (message.StartsWith("\n"))
+            while (message.StartsWith('\n'))
             {
                 // Log a new line
                 Console.WriteLine();

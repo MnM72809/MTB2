@@ -23,7 +23,7 @@ internal partial class Version
             // Check for updates
             string latestVersionString = CheckForUpdates();
             System.Version latestVersion = new(latestVersionString);
-    
+
             Log($"\nCurrent version: {versionString}", LogLevel.Debug);
             Log($"Latest version: {latestVersionString}", LogLevel.Debug);
             if (latestVersion > version)
@@ -42,28 +42,28 @@ internal partial class Version
                     Log("Installing anyway (forced)", LogLevel.Info);
                 }
             }
-    
+
             // Update STEP 1 ------------------------------------------------------
             Log("\nInitiating update", LogLevel.Info);
-    
+
             // Determine the files to download
             List<string> files = GetFilesToDownload();
-    
+
             string downloadDir = Path.Combine(programDir, "install", "download");
             _ = Functions.EnsureDirExists(downloadDir);
-    
+
             DownloadFiles(files, downloadDir);
-    
-    
-    
-    
+
+
+
+
             // Update STEP 2 ------------------------------------------------------
             Log("Download complete, updating...", LogLevel.Info);
             Log("Combining files...", LogLevel.Debug);
             string zipfileDirectory = Path.Combine(programDir, "install", "combine");
             _ = Functions.EnsureDirExists(zipfileDirectory);
             CombineFiles(zipfileDirectory);
-    
+
 
             // Update STEP 3 ------------------------------------------------------
             Log("Files combined successfully, extracting zip...", LogLevel.Debug);
@@ -71,7 +71,7 @@ internal partial class Version
             string ExtractDir = Path.Combine(programDir, "install", "extract");
             _ = Functions.EnsureDirExists(ExtractDir);
             ExtractZipFiles(zipfileDirectory, ExtractDir);
-    
+
 
             // Update STEP 4 ------------------------------------------------------
             Log("Files extracted successfully, copying files...", LogLevel.Debug);
@@ -82,7 +82,7 @@ internal partial class Version
         catch (Exception ex)
         {
             Log($"Error during update: {ex.Message}", LogLevel.Error);
-            
+
             // Retry (but not infinitely)
             if (retryTime < timesToRetry - 1)
             {
@@ -183,7 +183,7 @@ internal partial class Version
     private static void CombineFiles(string zipfileDirectory)
     {
         string firstPartFilePath = Path.Combine(programDir, "install", "download", "updateParts.zip.001");
-        
+
 
         ProcessStartInfo p = new()
         {
@@ -218,7 +218,7 @@ internal partial class Version
     private static void ExtractZipFiles(string zipfileDirectory, string ExtractDir)
     {
         string[] zipFilePaths = Directory.GetFiles(zipfileDirectory, "*.zip");
-        
+
         foreach (string zipFilePath in zipFilePaths)
         {
             ProcessStartInfo p2 = new()
@@ -273,7 +273,8 @@ internal partial class Version
 
     private static string batchFilePath = Path.Combine(programDir, "install", "update.bat");
 
-    public static void FinishUpdate() {
+    public static void FinishUpdate()
+    {
         // Delete update batch file
         if (File.Exists(batchFilePath)) File.Delete(batchFilePath);
         Log("Deleted update batch file", LogLevel.Debug);
@@ -289,11 +290,68 @@ internal partial class Version
         {
             Environment.SetEnvironmentVariable("PATH", path + ";" + programDir, EnvironmentVariableTarget.User);
             Log("Added program directory to PATH", LogLevel.Debug);
-        } else
+        }
+        else
         {
             Log("Program directory already in PATH", LogLevel.Debug);
         }
 
+        return;
+    }
+
+
+
+
+
+
+    public static void Uninstall()
+    {
+        string uninstallPath = Path.Combine(programDir, "uninstall");
+        // Delete program directory
+        //if (Directory.Exists(programDir)) Directory.Delete(programDir, true);
+        //Log("Deleted program directory", LogLevel.Debug);
+
+        // Remove from PATH
+        string? path = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
+        if (path != null && path.Contains(programDir))
+        {
+            path = path.Replace(programDir, "");
+            Environment.SetEnvironmentVariable("PATH", path, EnvironmentVariableTarget.User);
+            Log("Removed program directory from PATH", LogLevel.Debug);
+        }
+        else
+        {
+            Log("Program directory not in PATH", LogLevel.Debug);
+        }
+
+
+
+        // Write a VBScript to show a messagebox
+        string vbsFilePath = Path.Combine(uninstallPath, "messagebox.vbs");
+        using (StreamWriter vbsWriter = new(vbsFilePath))
+        {
+            vbsWriter.WriteLine("x=msgbox(\"Uninstallation of MTB2 complete\",0,\"MTB2Uninstaller\")");
+        }
+
+        string dirToDelete = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MTB2");
+
+        // Write a batch file to delete the program directory and then itself
+        string batchFilePath = Path.Combine(uninstallPath, "uninstall.bat");
+        using StreamWriter writer = new(batchFilePath);
+        writer.WriteLine("@echo off");
+        writer.WriteLine("echo Uninstalling program...");
+        writer.WriteLine("timeout /t 5 > nul"); // Wait for 5 seconds
+        writer.WriteLine($"Deleting program directory: {programDir}");
+        writer.WriteLine($"rmdir /s /q \"{programDir}\"");
+        writer.WriteLine($"Deleting files: {dirToDelete}");
+        writer.WriteLine($"rmdir /s /q \"{dirToDelete}\"");
+
+        // Run the VBScript
+        writer.WriteLine($"cscript //nologo \"{vbsFilePath}\"");
+
+        writer.WriteLine("echo Uninstallation complete");
+        writer.WriteLine($"start cmd.exe /C \"timeout /T 3 && del /Q /F \"\"%~f0\"\"\" && del /Q /F \"{vbsFilePath}\"");
+        writer.WriteLine("exit");
         return;
     }
 }

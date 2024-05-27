@@ -78,6 +78,8 @@ internal class Arguments
             case "--loglinenumbers":
             case "--linenumbers":
             case "--lognumbers":
+            case "--debugloglines":
+            case "--loglines":
             case "-ln":
                 logLineNumbers = true;
                 Log("Log line numbers enabled", LogLevel.Debug);
