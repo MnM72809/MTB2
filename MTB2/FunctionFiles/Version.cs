@@ -6,11 +6,23 @@ using static MTB2.Debugger;
 
 namespace MTB2;
 
+/// <summary>
+/// Represents the Version class responsible for handling updates and installations.
+/// </summary>
 internal partial class Version
 {
+    /// <summary>
+    /// The program directory path.
+    /// </summary>
     public static string programDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MTB2", "files");
 
     private const int timesToRetry = 3;
+
+    /// <summary>
+    /// Handles the update process.
+    /// </summary>
+    /// <param name="force">Indicates whether to force the update.</param>
+    /// <param name="retryTime">The number of times the update has been retried.</param>
     public static void HandleUpdate(bool force = false, int retryTime = 0)
     {
         try
@@ -87,11 +99,15 @@ internal partial class Version
             if (retryTime < timesToRetry - 1)
             {
                 Log("Retrying update...", LogLevel.Info);
-                HandleUpdate(retryTime: retryTime + 1);
+                HandleUpdate(force: force, retryTime: retryTime + 1);
             }
         }
     }
 
+    /// <summary>
+    /// Checks for updates by comparing the current version with the latest version.
+    /// </summary>
+    /// <returns>The latest version string.</returns>
     private static string CheckForUpdates()
     {
         try
@@ -109,6 +125,10 @@ internal partial class Version
         }
     }
 
+    /// <summary>
+    /// Gets the list of files to download for the update.
+    /// </summary>
+    /// <returns>The list of files to download.</returns>
     private static List<string> GetFilesToDownload()
     {
         try
@@ -125,6 +145,11 @@ internal partial class Version
         }
     }
 
+    /// <summary>
+    /// Downloads the files for the update.
+    /// </summary>
+    /// <param name="files">The list of files to download.</param>
+    /// <param name="downloadDir">The directory to download the files to.</param>
     private static void DownloadFiles(List<string> files, string downloadDir)
     {
         int totalTicks = 10000;
@@ -180,6 +205,10 @@ internal partial class Version
         }
     }
 
+    /// <summary>
+    /// Combines the downloaded files into a single zip file.
+    /// </summary>
+    /// <param name="zipfileDirectory">The directory containing the downloaded files.</param>
     private static void CombineFiles(string zipfileDirectory)
     {
         string firstPartFilePath = Path.Combine(programDir, "install", "download", "updateParts.zip.001");
@@ -215,6 +244,11 @@ internal partial class Version
     }
 
 
+    /// <summary>
+    /// Extracts the zip files to the specified directory.
+    /// </summary>
+    /// <param name="zipfileDirectory">The directory containing the zip files.</param>
+    /// <param name="ExtractDir">The directory to extract the files to.</param>
     private static void ExtractZipFiles(string zipfileDirectory, string ExtractDir)
     {
         string[] zipFilePaths = Directory.GetFiles(zipfileDirectory, "*.zip");
@@ -238,6 +272,10 @@ internal partial class Version
     }
 
 
+    /// <summary>
+    /// Starts the update batch process.
+    /// </summary>
+    /// <param name="extractedFilesPath">The path to the extracted files.</param>
     private static void StartUpdateBatch(string extractedFilesPath)
     {
         //string batchFilePath = Path.Combine(programDir, "install", "update.bat");
@@ -254,7 +292,6 @@ internal partial class Version
             writer.WriteLine("echo Copying files; finishing update...");
             writer.WriteLine($"xcopy /s /y \"{extractedFilesPath}\" \"{Path.Combine(programDir, "program")}\"");
             writer.WriteLine($"start \"\" \"{programToStartPath}\" {arguments}");
-            //writer.WriteLine("pause");
         }
 
         ProcessStartInfo p3 = new()
@@ -262,7 +299,6 @@ internal partial class Version
             FileName = batchFilePath,
             WindowStyle = ProcessWindowStyle.Hidden,
             UseShellExecute = true,
-            //RedirectStandardOutput = true,
             CreateNoWindow = true
         };
 
@@ -273,6 +309,9 @@ internal partial class Version
 
     private static string batchFilePath = Path.Combine(programDir, "install", "update.bat");
 
+    /// <summary>
+    /// Finishes the update process by cleaning up temporary files and directories.
+    /// </summary>
     public static void FinishUpdate()
     {
         // Delete update batch file
@@ -284,11 +323,12 @@ internal partial class Version
         if (Directory.Exists(installDir)) Directory.Delete(installDir, true);
         Log("Deleted install directory", LogLevel.Debug);
 
+        string pathDir = Path.Combine(programDir, "program");
         // Add to path
         string? path = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
-        if (path != null && !path.Contains(programDir))
+        if (path != null && !path.Contains(pathDir))
         {
-            Environment.SetEnvironmentVariable("PATH", path + ";" + programDir, EnvironmentVariableTarget.User);
+            Environment.SetEnvironmentVariable("PATH", path + ";" + pathDir, EnvironmentVariableTarget.User);
             Log("Added program directory to PATH", LogLevel.Debug);
         }
         else
@@ -304,13 +344,12 @@ internal partial class Version
 
 
 
+    /// <summary>
+    /// Uninstalls the program by removing the program directory and cleaning up.
+    /// </summary>
     public static void Uninstall()
     {
         string uninstallPath = Path.Combine(programDir, "uninstall");
-        // Delete program directory
-        //if (Directory.Exists(programDir)) Directory.Delete(programDir, true);
-        //Log("Deleted program directory", LogLevel.Debug);
-
         // Remove from PATH
         string? path = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
         if (path != null && path.Contains(programDir))

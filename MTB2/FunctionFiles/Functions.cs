@@ -4,14 +4,18 @@ using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Edge;
 using OpenQA.Selenium.Support.UI;
 using System.Diagnostics;
+using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Windows.Forms;
 using static MTB2.Debugger;
+
+using LogLevel = MTB2.Debugger.LogLevel;
 
 namespace MTB2;
 
 internal class Functions
 {
-    public static string[] uiArgs = ["--enableui", "--enableconsoleui", "--enableUI", "--ui", "--UI"];
+    public static string[] uiArgs = ["--enableui", "--enableconsoleui", "--enableUI", "--ui", "--UI", "-ui", "-i"];
     public static void HandleUI(string[] args)
     {
 
@@ -76,9 +80,9 @@ internal class Functions
 
     private static void HandleProcessStartError(Exception ex)
     {
-        Log($"An error occurred: {ex.Message}", Debugger.LogLevel.Critical);
-        Log($"Stack trace: {ex.StackTrace}", Debugger.LogLevel.Critical);
-        Log("Failed to start new process. Press any key to exit, or press \"c\" to continue with console enabled.", Debugger.LogLevel.Critical);
+        Log($"An error occurred: {ex.Message}", LogLevel.Critical);
+        Log($"Stack trace: {ex.StackTrace}", LogLevel.Critical);
+        Log("Failed to start new process. Press any key to exit, or press \"c\" to continue with console enabled.", LogLevel.Critical);
         if (Console.ReadKey().Key != ConsoleKey.C)
         {
             Environment.Exit(1);
@@ -105,12 +109,13 @@ internal class Functions
             }
             catch (Exception ex)
             {
-                Log($"An error occurred: {ex.Message}", Debugger.LogLevel.Critical);
-                Log($"Stack trace: {ex.StackTrace}", Debugger.LogLevel.Critical);
+                Log($"An error occurred: {ex.Message}", LogLevel.Critical);
+                Log($"Stack trace: {ex.StackTrace}", LogLevel.Critical);
                 throw;
                 //return false;
             }
         }
+
         return false;
     }
 
@@ -139,10 +144,75 @@ internal class Functions
 
         return newId;
     }
+
+
+
+    public static void CheckForOtherProcesses()
+    {
+        // Unique id for the mutex
+        const string mutexId = "{8F6F0AC4-B9A1-45fd-A8CF-72F04E6BDE8F}";
+
+        using Mutex mutex = new(true, mutexId, out bool createdNew);
+        if (!createdNew)
+        {
+            // Another instance is already running.
+            Log("Another instance of the application is already running.", LogLevel.Critical);
+            Msb.ShowNotification("Another instance of MTB2 is already running.");
+            Environment.Exit(1);
+        }
+        else
+        {
+            // This instance is the first to run. Mutex will be released when this application ends.
+            Log("This instance is the first to run.", LogLevel.Debug);
+            return;
+        }
+    }
+
+    public static void CheckDirectory()
+    {
+        // Check if the program is executed from the right directory (programDir\files)
+        // The right directory is everything that contains the "MTB2" folder and the "program" folder
+
+        // Define the correct directory
+        string correctDirectory = Path.Combine(Version.programDir, "program");
+
+        // Get the current directory
+        string currentDirectory = Directory.GetCurrentDirectory();
+
+        // Check if the current directory is the correct directory
+        if (currentDirectory != correctDirectory)
+        {
+            Log($"The application is not executing in the correct directory. Current directory: {currentDirectory}", LogLevel.Warning);
+            Log("Restarting application in the correct directory...");
+
+            string correctExePath = Path.Combine(correctDirectory, "MTB2.exe");
+
+            // Check if file exists
+            if (!File.Exists(correctExePath))
+            {
+                Log("The application file does not exist in the correct directory.", LogLevel.Info);
+                Version.HandleUpdate(true);
+                return;
+            }
+
+            ProcessStartInfo startInfo = new()
+            {
+                FileName = correctExePath,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            Process.Start(startInfo);
+            Environment.Exit(0);
+        }
+        else
+        {
+            Log("The application is executing in the correct directory.", LogLevel.Debug);
+            return;
+        }
+    }
 }
 
-
-class StartOnBootClass
+internal class StartOnBootClass
 {
     // Start process when the computer boots
     public static void StartOnBoot()
@@ -329,20 +399,49 @@ public partial class Msb
         // Always return the message box with the type and the MB_SYSTEMMODAL flag
         return MessageBox(0, message, caption, type | 0x1000);
     }
+
+
+
+
+    public static void ShowNotification(string message, string caption = "MTB2 Notification")
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            Log("Can't show notification if not Windows.", level: LogLevel.Warning);
+            return;
+        }
+        // Check if windows version is 7 or higher
+        if (Environment.OSVersion.Version.Major < 6 ||
+            (Environment.OSVersion.Version.Major == 6 && Environment.OSVersion.Version.Minor < 1))
+        {
+            Log("Can't show notification if Windows version is lower than 7.", LogLevel.Warning);
+            return;
+        }
+
+#pragma warning disable CA1416 // Validate platform compatibility
+        NotifyIcon notifyIcon = new()
+        {
+            Visible = true,
+            Icon = SystemIcons.Information,
+            BalloonTipTitle = caption,
+            BalloonTipText = message
+        };
+
+        notifyIcon.ShowBalloonTip(3000); // Show notification for 3 seconds
+
+        // Dispose the icon after it's not needed to free up resources
+        System.Windows.Forms.Timer timer = new() { Interval = 3000 }; // Set timer for 3 seconds
+        timer.Tick += (sender, args) =>
+        {
+            notifyIcon.Dispose();
+            timer.Stop();
+        };
+        timer.Start();
+#pragma warning restore CA1416 // Validate platform compatibility
+    }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-class WebRequest
+internal class WebRequest
 {
     /// <summary>
     /// Retrieves the content of a web page specified by the given URL.
@@ -366,7 +465,7 @@ class WebRequest
 
             driver.Navigate().GoToUrl(url);
 
-            var wait = new OpenQA.Selenium.Support.UI.WebDriverWait(driver, TimeSpan.FromSeconds(10));
+            WebDriverWait wait = new(driver, TimeSpan.FromSeconds(10));
             wait.Until(drv => drv.FindElement(OpenQA.Selenium.By.TagName("body")));
 
             string pageContent = driver.FindElement(OpenQA.Selenium.By.TagName("body")).Text;
@@ -390,10 +489,10 @@ class WebRequest
     {
         get
         {
-            var chromeOptions = new ChromeOptions();
+            ChromeOptions chromeOptions = new();
             chromeOptions.AddArgument("headless");
 
-            var chromeService = ChromeDriverService.CreateDefaultService();
+            ChromeDriverService chromeService = ChromeDriverService.CreateDefaultService();
             chromeService.HideCommandPromptWindow = true;
             chromeService.SuppressInitialDiagnosticInformation = true;
 
@@ -405,10 +504,10 @@ class WebRequest
     {
         get
         {
-            var edgeOptions = new EdgeOptions();
+            EdgeOptions edgeOptions = new();
             edgeOptions.AddArgument("headless");
 
-            var edgeService = EdgeDriverService.CreateDefaultService();
+            EdgeDriverService edgeService = EdgeDriverService.CreateDefaultService();
             edgeService.HideCommandPromptWindow = true;
             edgeService.SuppressInitialDiagnosticInformation = true;
 
@@ -460,24 +559,7 @@ class WebRequest
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class Debugger
+internal class Debugger
 {
     public enum LogLevel
     {
@@ -574,6 +656,7 @@ class Debugger
                 {
                     shortFileName = shortFileName[..Math.Min(7, shortFileName.Length)]; // Neemt de eerste 8 tekens van de bestandsnaam zonder extensie
                 }
+
                 Console.Write($"L{new StackFrame(1, true).GetFileLineNumber()}F{shortFileName}");
             }
             else
@@ -627,6 +710,7 @@ class Debugger
         {
             Console.WriteLine(" ");
         }
+
         Console.Write("--> ");
         char key = Console.ReadKey().KeyChar;
         Console.WriteLine();
@@ -645,6 +729,7 @@ class Debugger
         {
             Console.WriteLine(" ");
         }
+
         Console.Write("--> ");
         string? input = Console.ReadLine();
         Console.WriteLine();

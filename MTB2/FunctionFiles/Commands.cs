@@ -1,9 +1,11 @@
 ﻿using System.Drawing;
+using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using static MTB2.Debugger;
 
 namespace MTB2;
-internal class Commands
+class Commands
 {
     private const int respondRetries = 3;
 
@@ -32,7 +34,27 @@ internal class Commands
 
             Log($"Commands: {rawCommands}", LogLevel.Debug);
 
-            var commands = Newtonsoft.Json.JsonConvert.DeserializeObject<List<CommandClass>>(rawCommands);
+            List<CommandClass>? commands = null;
+
+            try
+            {
+                commands = Newtonsoft.Json.JsonConvert.DeserializeObject<List<CommandClass>>(rawCommands);
+            }
+            catch (JsonException ex)
+            {
+                Log($"Failed to deserialize commands: {nameof(rawCommands)}: {rawCommands}", LogLevel.Error);
+                Log($"Exception details: {ex}");
+                // Try to deserialize with System.Text.Json
+                JsonSerializerOptions jsonSerializerOptions = new()
+                {
+                    PropertyNameCaseInsensitive = true,
+                };
+                jsonSerializerOptions.Converters.Add(new DateTimeConverter());
+
+                commands = JsonSerializer.Deserialize<List<CommandClass>>(rawCommands, jsonSerializerOptions);
+                //return new CommandResult { Success = false, ErrorMessage = $"Failed to deserialize commands: {nameof(rawCommands)}: {rawCommands}" };
+            }
+
 
             return commands == null || commands.Count == 0
                 ? new CommandResult { Success = false, ErrorMessage = $"Failed to convert commands to CommandClass: {nameof(commands)} is null or empty" }
@@ -43,7 +65,7 @@ internal class Commands
             Log($"Failed to get commands: {ex.Message}", LogLevel.Error);
             throw;
         }
-        catch (System.Text.Json.JsonException ex)
+        catch (JsonException ex)
         {
             Log($"Failed to deserialize commands: {ex.Message}", LogLevel.Error);
             throw;
@@ -57,8 +79,8 @@ internal class Commands
         static CommandResult HandleWebError(string rawCommands)
         {
             Dictionary<string, string>? error = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(rawCommands);
-            string errorMessage = error != null && error.TryGetValue("error", out string? errorValue) ? errorValue : rawCommands;
-            string responseCode = error != null && error.TryGetValue("code", out string? codeValue) ? codeValue : "No response code found";
+            string errorMessage = error is { } && error.TryGetValue("error", out string? errorValue) ? errorValue : rawCommands;
+            string responseCode = error is { } && error.TryGetValue("code", out string? codeValue) ? codeValue : "No response code found";
             var msg = $"Error when getting commands: {errorMessage}, response code: {responseCode}, Program.computerId: {Program.computerId}";
             return new CommandResult { Success = false, ErrorMessage = msg };
         }
@@ -75,6 +97,23 @@ internal class Commands
         }
     }
 
+    public class DateTimeConverter : System.Text.Json.Serialization.JsonConverter<DateTime>
+    {
+        public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            string? dateString = reader.GetString();
+            return dateString != null
+                ? DateTime.ParseExact(dateString, "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                : DateTime.MinValue;
+        }
+
+        public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
+        {
+            writer.WriteStringValue(value.ToString("yyyy-MM-dd HH:mm:ss"));
+        }
+    }
+
+
     public class CommandClass
     {
         public string? Command { get; set; }
@@ -82,8 +121,19 @@ internal class Commands
         public string? Response { get; set; }
         public string? Status { get; set; }
         public int? Id { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("computer_id")]
         public string? ComputerId { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("received_at")]
         public DateTime? ReceivedAt { get; set; }
+
+        [System.Text.Json.Serialization.JsonConstructor]
+        public CommandClass()
+        {
+            // This constructor is used by the JsonSerializer.
+            // Don't remove this constructor, even if it appears to be unused.
+        }
     }
 
     public class CommandResult
@@ -311,6 +361,37 @@ internal class Commands
                 {
                     Log($"Screenshot uploaded successfully (command: {command}, filename: {screenshotName}, size: {fileSizeMB:0.00} MB)", LogLevel.Info);
                     Respond($"Screenshot uploaded successfully; screenshot name: {screenshotName}, size: {fileSizeMB:0.00} MB", id, Status.completed);
+                }
+                break;
+            case "shownotification":
+            case "notification":
+            case "notify":
+                // Show notification
+                const string titleKey = "title";
+                const string textKey = "text";
+                if (parameters is not null)
+                {
+                    string messagePlaceholder = "Notification";
+                    string title = parameters.TryGetValue(titleKey, out object? titleValue) ? titleValue?.ToString() ?? messagePlaceholder : messagePlaceholder;
+                    if (parameters.TryGetValue(textKey, out object? textValue))
+                    {
+                        string text = textValue?.ToString() ?? "Hello";
+                        Log($"Show notification requested (command: {command}, title: {title}, text: {text})", LogLevel.Info);
+                        Msb.ShowNotification(text, title);
+                        Respond($"Notification showed successfully (command: {command}, title: {title}, text: {text})", id, Status.completed);
+                    }
+                    else
+                    {
+                        Log($"Show notification requested (command: {command}), but no text was specified -> ignoring command; respond", LogLevel.Warning);
+                        Respond($"Error executing command {command}; parameters does not contain key \"{textKey}\"", id, Status.failed);
+                        break;
+                    }
+                }
+                else
+                {
+                    Log($"Show notification requested (command: {command}), but parameters is null -> ignoring command; respond", LogLevel.Warning);
+                    Respond($"Error executing command {command}; parameters is null", id, Status.failed);
+                    break;
                 }
                 break;
             case "remove":

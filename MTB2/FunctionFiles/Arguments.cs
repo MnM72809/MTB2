@@ -4,6 +4,10 @@ using static MTB2.Debugger;
 namespace MTB2;
 internal class Arguments
 {
+    /// <summary>
+    /// Handles the command line arguments.
+    /// </summary>
+    /// <param name="args">The command line arguments.</param>
     public static void HandleArguments(string[] args)
     {
         // Convert arguments to lowercase
@@ -18,21 +22,26 @@ internal class Arguments
 
         // Switch through arguments
         Log("\nSwitching through arguments", LogLevel.Debug);
+        string[] otherUiArg = { "--version", "-v", "-h", "--help" };
         foreach (string arg in args)
         {
-            if (Functions.uiArgs.Contains(arg))
+            if (!Functions.uiArgs.Contains(arg) || otherUiArg.Contains(arg))
             {
-                Log("UI argument provided", LogLevel.Debug);
+                HandleArgument(arg);
             }
             else
             {
-                HandleArgument(arg);
+                Log("UI argument provided", LogLevel.Debug);
             }
         }
 
         Log("Finished switching through arguments\n", LogLevel.Debug);
     }
 
+    /// <summary>
+    /// Handles the specified argument.
+    /// </summary>
+    /// <param name="arg">The argument to handle.</param>
     private static void HandleArgument(string arg)
     {
         switch (arg)
@@ -40,11 +49,14 @@ internal class Arguments
             case "-h":
             case "--help":
                 Log("Help requested", LogLevel.Info);
+                ShowHelp();
+                Environment.Exit(0);
                 break;
             case "-v":
             case "--version":
                 Log("Version requested", LogLevel.Debug);
                 Log($"---------- Version {Version.versionString} (source: arguments) ----------", LogLevel.Info, force: true);
+                Environment.Exit(0);
                 break;
             case "-d":
             case "--debug":
@@ -90,55 +102,33 @@ internal class Arguments
         }
     }
 
-    //private static void HandleHelpArgument()
-    //{
-    //    Log("Help requested", LogLevel.Info);
-    //}
-
-    //private static void HandleVersionArgument()
-    //{
-    //    Log("Version requested", LogLevel.Debug);
-    //    Log($"---------- Version {Version.versionString} (source: arguments) ----------", LogLevel.Info, force: true);
-    //}
-
-    //private static void HandleDebugArgument()
-    //{
-    //    Log("Debug mode requested", LogLevel.Debug);
-    //    currentLevel = LogLevel.Debug;
-    //    Log("---------- Debug mode enabled (source: arguments) ----------", LogLevel.Debug);
-    //}
-
-    //private static void HandleUpdateArgument()
-    //{
-    //    Log("Update requested");
-    //    Version.HandleUpdate(true);
-    //}
-
-    //private static void FinishUpdate()
-    //{
-    //    Log("Finishing update...", LogLevel.Info);
-    //    Version.FinishUpdate();
-    //    Log("Update finished", LogLevel.Info);
-    //}
-
-    //private static void SetProcessPriority()
-    //{
-    //    Process currentProcess = Process.GetCurrentProcess();
-    //    currentProcess.PriorityClass = ProcessPriorityClass.Normal;
-    //}
-
-    //private static void HandleUnknownArgument(string arg)
-    //{
-    //    Log($"Unknown argument provided: {arg}", LogLevel.Warning);
-    //}
-
-
+    /// <summary>
+    /// Displays the help information.
+    /// </summary>
+    private static void ShowHelp()
+    {
+        Console.WriteLine("\n---------- Help (source: arguments) ----------");
+        Console.WriteLine("\nArguments:");
+        Console.WriteLine("\n-h, --help: \n\tShow help information");
+        Console.WriteLine("\n-v, --version: \n\tShow version information");
+        Console.WriteLine("\n-d, --debug: \n\tEnable debug mode");
+        Console.WriteLine("\n--forceupdate, --forceinstall, --update, --install, -u: \n\tRequest an update");
+        Console.WriteLine("\n--finishupdate, --finishinstall: \n\tFinish an update");
+        Console.WriteLine("\n--setpriority, --normalpriority, --priority, --setprocesspriority, --normalprocesspriority, --processpriority: \n\tSet process priority to normal");
+        Console.WriteLine("\n--loglinenumbers, --linenumbers, --lognumbers, --debugloglines, --loglines, -ln: \n\tEnable log line numbers");
+        Console.WriteLine("\n---------- End of help ----------\n");
+    }
 
 
 
 
 
     // If #debug, prompt to change arguments
+    /// <summary>
+    /// Prompts the user to change the arguments if in debug mode.
+    /// </summary>
+    /// <param name="args">The current arguments.</param>
+    /// <returns>The updated arguments.</returns>
     public static string[] PromptArguments(string[] args)
     {
         // Temporarily change log level
